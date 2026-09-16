@@ -5,4 +5,4 @@ compatibility_date = "2023-10-30"
 [[d1_databases]]
 binding = "DB"
 database_name = "yuviarc"
-database_id = "7d6de387-34e4-41a0-8a5a-f604936ba32c" # Replace after running `wrangler d1 create sdk-panel-db`
+database_id = "7d6de387-34e4-41a0-8a5a-f604936ba32c"
