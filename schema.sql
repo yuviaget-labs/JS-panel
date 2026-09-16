@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('OWNER', 'ADMIN')),
-  created_by INTEGER,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -36,5 +35,5 @@ CREATE TABLE IF NOT EXISTS server_status (
   maintenance_message TEXT DEFAULT ''
 );
 
--- 🔥 DEFAULT OWNER ACCOUNT CREATE KAREIN (Username: owner, Password: owner123)
+-- 🔥 DEFAULT OWNER ACCOUNT (Username: owner | Password: owner123)
 INSERT INTO users (username, password_hash, role) VALUES ('owner', 'owner123', 'OWNER');
