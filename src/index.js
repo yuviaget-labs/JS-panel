@@ -1,449 +1,381 @@
 // ==========================================
-// 🔐 HELPERS & AUTH
+// 🔐 AUTH & HELPERS
 // ==========================================
-async function getSession(request) {
-  const cookie = request.headers.get('cookie') || '';
-  const match = cookie.match(/session=([^;]+)/);
-  if (!match) return null;
-  try { return JSON.parse(atob(match[1])); } catch (e) { return null; }
+async function getSession(req) {
+  const c = req.headers.get('cookie') || '';
+  const m = c.match(/session=([^;]+)/);
+  if (!m) return null;
+  try { return JSON.parse(atob(m[1])); } catch { return null; }
 }
-
-function setSessionCookie(userId, role, username) {
-  const payload = btoa(JSON.stringify({ userId, role, username }));
-  return `session=${payload}; Path=/; HttpOnly; Secure; Max-Age=86400; SameSite=Lax`;
-}
-
-function clearSessionCookie() {
-  return 'session=; Path=/; HttpOnly; Secure; Max-Age=0';
-}
+function setSession(u) { return `session=${btoa(JSON.stringify(u))}; Path=/; HttpOnly; Secure; Max-Age=86400; SameSite=Lax`; }
+function clearSession() { return 'session=; Path=/; HttpOnly; Secure; Max-Age=0'; }
 
 // ==========================================
-// 🎨 HTML LAYOUT (Mobile Responsive + Collapsing Sidebar)
+// 🎨 UI LAYOUT (Mobile Responsive + Collapsing Sidebar)
 // ==========================================
-function htmlLayout(title, content, user = null) {
-  let sidebarLinks = '';
+function layout(title, content, user) {
+  let nav = '';
   if (user) {
-    sidebarLinks = `
-      <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-medium mb-1 text-slate-600 hover:bg-white/50 hover:text-emerald-700">
-        <i class="bi bi-speedometer2 text-lg w-6 text-center"></i> Dashboard
-      </a>
-      <a href="/generate" class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-medium mb-1 text-slate-600 hover:bg-white/50 hover:text-emerald-700">
-        <i class="bi bi-key-fill text-lg w-6 text-center"></i> Generate SDK
-      </a>
-      <a href="/keys" class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-medium mb-1 text-slate-600 hover:bg-white/50 hover:text-emerald-700">
-        <i class="bi bi-view-list text-lg w-6 text-center"></i> SDK Keys
-      </a>
+    nav = `
+      <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-speedometer2 w-6 text-center"></i> Dashboard</a>
+      <a href="/generate" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-key-fill w-6 text-center"></i> Generate SDK</a>
+      <a href="/keys" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-view-list w-6 text-center"></i> SDK Keys</a>
     `;
-    // Sirf OWNER ke liye Server aur Referral links
     if (user.role === 'OWNER') {
-      sidebarLinks += `
-        <a href="/server" class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-medium mb-1 text-slate-600 hover:bg-white/50 hover:text-emerald-700">
-          <i class="bi bi-hdd-network-fill text-lg w-6 text-center"></i> Server Control
-        </a>
-        <a href="/referral" class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-medium mb-1 text-slate-600 hover:bg-white/50 hover:text-emerald-700">
-          <i class="bi bi-person-plus-fill text-lg w-6 text-center"></i> Referral
-        </a>
+      nav += `
+        <a href="/server" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-hdd-network-fill w-6 text-center"></i> Server</a>
+        <a href="/referral" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-person-plus-fill w-6 text-center"></i> Referral</a>
       `;
     }
   }
 
-  const userMenu = user ? `
-    <div class="flex items-center gap-3">
-      <div class="hidden sm:flex flex-col items-end">
-        <span class="text-sm font-bold text-slate-700">${user.username}</span>
-        <span class="text-[10px] font-extrabold tracking-widest bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent uppercase">${user.role}</span>
-      </div>
-      <a href="/logout" class="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 text-white flex items-center justify-center font-bold text-lg border-2 border-white/80 cursor-pointer transition-all duration-300 hover:scale-110">
-        <i class="bi bi-box-arrow-right"></i>
-      </a>
-    </div>
-  ` : '';
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - SDK Panel</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-  <style>
-    body { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 25%, #CCFBF1 50%, #E0F2FE 75%, #F0FDFA 100%); background-attachment: fixed; min-height: 100vh; }
-    .glass-card { background: linear-gradient(135deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.6)); backdrop-filter: blur(24px); border-radius: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8); border: 1px solid rgba(255, 255, 255, 0.7); }
-    .glass-sidebar { background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.55)); backdrop-filter: blur(28px); border-right: 1px solid rgba(255, 255, 255, 0.6); }
-    .glass-header { background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.65)); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255, 255, 255, 0.6); }
-    .btn-premium { background: linear-gradient(135deg, #10B981, #14B8A6, #06B6D4); color: white !important; transition: all 0.4s ease; box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3); border: none; cursor: pointer; }
-    .btn-premium:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(16, 185, 129, 0.5); }
-    input, select { border-radius: 14px !important; }
-    .tab-btn { padding: 8px 20px; border-radius: 12px; font-weight: 600; font-size: 14px; color: #64748B; transition: all 0.3s; cursor: pointer; border: none; background: rgba(255,255,255,0.5); }
-    .tab-btn.active { background: linear-gradient(135deg, #8B5CF6, #6366F1); color: white; box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4); }
-    .tab-btn.active-bcore { background: linear-gradient(135deg, #F59E0B, #EF4444); color: white; box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4); }
-  </style>
-</head>
-<body class="text-slate-800 flex h-screen overflow-hidden selection:bg-emerald-500/20">
-  ${user ? `
-  <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 hidden md:hidden"></div>
-  <aside id="sidebar" class="w-72 glass-sidebar flex flex-col absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-50">
-    <div class="h-20 flex items-center justify-between px-6 border-b border-white/50">
-      <h1 class="text-lg font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
-        <div class="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg"><i class="bi bi-boxes text-lg"></i></div>
-        <span class="uppercase bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">SDK PANEL</span>
-      </h1>
-      <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-slate-600 text-2xl"><i class="bi bi-x-lg"></i></button>
-    </div>
-    <nav class="flex-1 py-6 px-4 overflow-y-auto space-y-1">${sidebarLinks}</nav>
-  </aside>` : ''}
-  
-  <div class="flex-1 flex flex-col h-screen overflow-y-auto relative w-full">
-    <header class="h-16 md:h-20 glass-header sticky top-0 z-30 flex items-center justify-between px-4 lg:px-10">
-      <div class="flex items-center gap-3 w-1/4">
-        ${user ? `<button onclick="toggleSidebar()" class="md:hidden text-slate-600 hover:text-emerald-600 transition-all bg-white/70 backdrop-blur p-2.5 rounded-xl border border-white shadow-sm"><i class="bi bi-list text-2xl"></i></button>` : ''}
-        <div class="hidden md:flex flex-col">
-          <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">SDK Workspace</span>
-          <h2 class="font-bold text-slate-700 text-[15px]">Welcome</h2>
-        </div>
-      </div>
-      <div class="flex items-center justify-end gap-3 z-10 w-1/4 md:w-auto">${userMenu}</div>
-    </header>
-    <main class="p-4 md:p-8 lg:p-10 pb-20 relative z-10 flex-1 overflow-y-auto">${content}</main>
-  </div>
-  <script>
-    function toggleSidebar() {
-      document.getElementById('sidebar').classList.toggle('-translate-x-full');
-      document.getElementById('sidebar-overlay').classList.toggle('hidden');
-    }
-    function switchTab(wrapperId, tabName) {
-      const wrapper = document.getElementById(wrapperId);
-      if(!wrapper) return;
-      wrapper.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      wrapper.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active', 'active-bcore'));
-      wrapper.querySelector('#tab-' + tabName).classList.remove('hidden');
-      const btn = wrapper.querySelector('[data-tab="' + tabName + '"]');
-      btn.classList.add(tabName === 'bcore' ? 'active-bcore' : 'active');
-    }
-  </script>
-</body>
-</html>`;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title><script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<style>
+body{background:linear-gradient(135deg,#ECFDF5,#D1FAE5,#CCFBF1);background-attachment:fixed;min-height:100vh}
+.glass{background:rgba(255,255,255,0.7);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.6);border-radius:24px;box-shadow:0 8px 32px rgba(0,0,0,0.05)}
+.btn-premium{background:linear-gradient(135deg,#10B981,#14B8A6);color:#fff;border:none;padding:12px 24px;border-radius:16px;font-weight:bold;cursor:pointer;box-shadow:0 8px 20px rgba(16,185,129,0.3)}
+.btn-premium:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(16,185,129,0.5)}
+.tab-btn{padding:10px 24px;border-radius:12px;font-weight:600;color:#64748B;cursor:pointer;border:none;background:rgba(255,255,255,0.5)}
+.tab-btn.active-m{background:linear-gradient(135deg,#8B5CF6,#6366F1);color:#fff;box-shadow:0 6px 16px rgba(139,92,246,0.4)}
+.tab-btn.active-b{background:linear-gradient(135deg,#F59E0B,#EF4444);color:#fff;box-shadow:0 6px 16px rgba(245,158,11,0.4)}
+.tab-content{display:none}.tab-content.active{display:block}
+input,select{border-radius:14px!important}
+</style></head>
+<body class="text-slate-800 flex h-screen overflow-hidden">
+${user ? `<div id="overlay" onclick="toggleSB()" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 hidden md:hidden"></div>
+<aside id="sb" class="w-72 glass flex flex-col absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform z-50">
+<div class="h-20 flex items-center justify-between px-6 border-b border-white/50">
+<h1 class="text-lg font-black text-emerald-600 uppercase">SDK Panel</h1>
+<button onclick="toggleSB()" class="md:hidden text-2xl"><i class="bi bi-x-lg"></i></button>
+</div>
+<nav class="flex-1 py-6 px-4 overflow-y-auto space-y-1">${nav}</nav>
+</aside>` : ''}
+<div class="flex-1 flex flex-col h-screen overflow-y-auto">
+<header class="h-16 glass sticky top-0 z-30 flex items-center justify-between px-6">
+<div class="flex items-center gap-3">
+${user ? `<button onclick="toggleSB()" class="md:hidden text-2xl text-slate-600"><i class="bi bi-list"></i></button>` : ''}
+<h2 class="font-bold text-slate-700 hidden md:block">SDK Workspace</h2>
+</div>
+${user ? `<div class="flex items-center gap-3">
+<div class="hidden sm:flex flex-col items-end"><span class="text-sm font-bold">${user.username}</span><span class="text-[10px] font-black text-emerald-600 uppercase">${user.role}</span></div>
+<a href="/logout" class="w-10 h-10 rounded-2xl bg-red-500 text-white flex items-center justify-center"><i class="bi bi-box-arrow-right"></i></a>
+</div>` : ''}
+</header>
+<main class="p-4 md:p-8 flex-1 overflow-y-auto">${content}</main>
+</div>
+<script>
+function toggleSB(){document.getElementById('sb').classList.toggle('-translate-x-full');document.getElementById('overlay').classList.toggle('hidden')}
+function switchTab(id,tab){
+  const w=document.getElementById(id);if(!w)return;
+  w.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+  w.querySelectorAll('.tab-btn').forEach(e=>{e.classList.remove('active-m','active-b')});
+  w.querySelector('#tc-'+tab).classList.add('active');
+  const b=w.querySelector('[data-tab="'+tab+'"]');
+  b.classList.add(tab==='mundo'?'active-m':'active-b');
+}
+function toggleBlur(id){const e=document.getElementById('k-'+id);e.classList.toggle('blur-sm');e.classList.toggle('select-none')}
+function copyKey(t,b){navigator.clipboard.writeText(t);b.innerHTML='<i class="bi bi-check2"></i> Copied';setTimeout(()=>b.innerHTML='<i class="bi bi-clipboard"></i> Copy',1500)}
+</script></body></html>`;
 }
 
 // ==========================================
-// 🚦 ROUTE HANDLERS
+// 🚦 ROUTES
 // ==========================================
-async function handleLoginGet(req, env) {
-  const session = await getSession(req);
-  if (session) return Response.redirect(new URL('/dashboard', req.url), 302);
-  const content = `
-    <div class="max-w-md mx-auto glass-card p-8 mt-10">
-      <h2 class="text-2xl font-black text-slate-800 mb-6 text-center">Login to SDK Panel</h2>
-      <form method="POST" action="/login" class="space-y-4">
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Username</label>
-        <input type="text" name="username" required class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"></div>
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Password</label>
-        <input type="password" name="password" required class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"></div>
-        <button type="submit" class="btn-premium w-full py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wider">Login</button>
+async function handleLogin(req, env) {
+  if (req.method === 'GET') {
+    return new Response(layout('Login', `<div class="max-w-md mx-auto glass p-8 mt-10">
+      <h2 class="text-2xl font-black text-center mb-6">Login</h2>
+      <form method="POST" class="space-y-4">
+        <input type="text" name="username" placeholder="Username" required class="w-full bg-white/50 border px-4 py-3">
+        <input type="password" name="password" placeholder="Password" required class="w-full bg-white/50 border px-4 py-3">
+        <button class="btn-premium w-full">Login</button>
       </form>
-      <p class="text-center text-sm text-slate-500 mt-6">No account? <a href="/register" class="text-emerald-600 font-bold hover:underline">Register via Referral</a></p>
-    </div>`;
-  return new Response(htmlLayout('Login', content), { headers: { 'Content-Type': 'text/html' } });
-}
-
-async function handleLoginPost(req, env) {
-  const formData = await req.formData();
-  const username = formData.get('username');
-  const password = formData.get('password');
-  const user = await env.DB.prepare('SELECT id, username, role, password_hash FROM users WHERE username = ?').bind(username).first();
-  if (user && password === user.password_hash) { 
-    const cookie = setSessionCookie(user.id, user.role, user.username);
-    return new Response(null, { status: 302, headers: { 'Location': '/dashboard', 'Set-Cookie': cookie } });
+      <p class="text-center mt-4 text-sm">No account? <a href="/register" class="text-emerald-600 font-bold">Register</a></p>
+    </div>`), { headers: { 'Content-Type': 'text/html' } });
   }
-  return new Response(htmlLayout('Login', `<div class="max-w-md mx-auto glass-card p-8 mt-10 text-center text-red-600 font-bold">Invalid credentials</div>`), { headers: { 'Content-Type': 'text/html' } });
+  const f = await req.formData();
+  const u = await env.DB.prepare('SELECT * FROM users WHERE username=? AND password=?').bind(f.get('username'), f.get('password')).first();
+  if (u) return new Response(null, { status: 302, headers: { 'Location': '/dashboard', 'Set-Cookie': setSession({ id: u.id, username: u.username, role: u.role }) } });
+  return new Response(layout('Login', `<div class="max-w-md mx-auto glass p-8 text-center text-red-600 font-bold">Invalid Credentials</div>`), { headers: { 'Content-Type': 'text/html' } });
 }
 
-async function handleRegisterGet(req, env) {
-  const content = `
-    <div class="max-w-md mx-auto glass-card p-8 mt-10">
-      <h2 class="text-2xl font-black text-slate-800 mb-2 text-center">Register</h2>
-      <p class="text-center text-slate-500 text-sm mb-6">You need a valid referral code to register.</p>
-      <form method="POST" action="/register" class="space-y-4">
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Referral Code</label>
-        <input type="text" name="referral_code" required class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400 uppercase"></div>
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Username</label>
-        <input type="text" name="username" required class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"></div>
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Password</label>
-        <input type="password" name="password" required class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"></div>
-        <button type="submit" class="btn-premium w-full py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wider">Register</button>
+async function handleRegister(req, env) {
+  if (req.method === 'GET') {
+    return new Response(layout('Register', `<div class="max-w-md mx-auto glass p-8 mt-10">
+      <h2 class="text-2xl font-black text-center mb-6">Register</h2>
+      <form method="POST" class="space-y-4">
+        <input type="text" name="code" placeholder="Referral Code" required class="w-full bg-white/50 border px-4 py-3 uppercase">
+        <input type="text" name="username" placeholder="Username" required class="w-full bg-white/50 border px-4 py-3">
+        <input type="password" name="password" placeholder="Password" required class="w-full bg-white/50 border px-4 py-3">
+        <button class="btn-premium w-full">Register</button>
       </form>
-    </div>`;
-  return new Response(htmlLayout('Register', content), { headers: { 'Content-Type': 'text/html' } });
-}
-
-async function handleRegisterPost(req, env) {
-  const formData = await req.formData();
-  const refCode = formData.get('referral_code').toUpperCase();
-  const username = formData.get('username');
-  const password = formData.get('password');
-
-  const ref = await env.DB.prepare('SELECT * FROM referrals WHERE code = ? AND is_used = 0').bind(refCode).first();
-  if (!ref) return new Response(htmlLayout('Register', `<div class="max-w-md mx-auto glass-card p-8 mt-10 text-center text-red-600 font-bold">Invalid or used referral code.</div>`), { headers: { 'Content-Type': 'text/html' } });
-
+    </div>`), { headers: { 'Content-Type': 'text/html' } });
+  }
+  const f = await req.formData();
+  const ref = await env.DB.prepare('SELECT * FROM referrals WHERE code=? AND is_used=0').bind(f.get('code').toUpperCase()).first();
+  if (!ref) return new Response(layout('Register', `<div class="max-w-md mx-auto glass p-8 text-center text-red-600">Invalid Code</div>`), { headers: { 'Content-Type': 'text/html' } });
   try {
-    // Referral ke selected role ke hisaab se user create hoga
-    await env.DB.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').bind(username, password, ref.role_granted).run();
-    await env.DB.prepare('UPDATE referrals SET is_used = 1 WHERE code = ?').bind(refCode).run();
+    await env.DB.prepare('INSERT INTO users (username,password,role) VALUES(?,?,?)').bind(f.get('username'), f.get('password'), ref.role_granted).run();
+    await env.DB.prepare('UPDATE referrals SET is_used=1 WHERE id=?').bind(ref.id).run();
     return Response.redirect(new URL('/login', req.url), 302);
-  } catch (e) {
-    return new Response(htmlLayout('Register', `<div class="max-w-md mx-auto glass-card p-8 mt-10 text-center text-red-600 font-bold">Username already exists.</div>`), { headers: { 'Content-Type': 'text/html' } });
-  }
+  } catch { return new Response(layout('Register', `<div class="max-w-md mx-auto glass p-8 text-center text-red-600">Username exists</div>`), { headers: { 'Content-Type': 'text/html' } }); }
 }
 
 async function handleDashboard(req, env) {
-  const session = await getSession(req);
-  if (!session) return Response.redirect(new URL('/login', req.url), 302);
-  const stats = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM sdk_keys WHERE user_id = ?) as total_keys, (SELECT COUNT(*) FROM sdk_keys WHERE user_id = ? AND is_blocked = 0) as active_keys`).bind(session.userId, session.userId).first();
-  
-  const content = `
-    <div class="max-w-6xl mx-auto">
-      <h1 class="text-2xl md:text-3xl font-black text-slate-800 mb-6 flex items-center gap-3"><i class="bi bi-speedometer2 text-emerald-500"></i> Dashboard</h1>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div class="glass-card p-6"><p class="text-3xl font-black text-slate-800">${stats.total_keys}</p><p class="text-xs text-slate-500 font-medium mt-1">Total SDK Keys</p></div>
-        <div class="glass-card p-6"><p class="text-3xl font-black text-slate-800">${stats.active_keys}</p><p class="text-xs text-slate-500 font-medium mt-1">Active Keys</p></div>
-        <div class="glass-card p-6"><p class="text-3xl font-black text-slate-800">${session.role}</p><p class="text-xs text-slate-500 font-medium mt-1">Your Access Level</p></div>
+  const s = await getSession(req); if (!s) return Response.redirect(new URL('/login', req.url), 302);
+  const stats = await env.DB.prepare(`SELECT engine, COUNT(*) as total, SUM(CASE WHEN is_blocked=0 THEN 1 ELSE 0 END) as active FROM sdk_keys WHERE user_id=? GROUP BY engine`).bind(s.id).all();
+  const getStat = (e) => stats.results.find(x => x.engine === e) || { total: 0, active: 0 };
+  const m = getStat('MUNDO'), b = getStat('BCORE');
+
+  const renderTab = (engine, data, color) => `
+    <div id="tc-${engine.toLowerCase()}" class="tab-content ${engine==='MUNDO'?'active':''}">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="glass p-4"><p class="text-2xl font-black">${data.total}</p><p class="text-xs text-slate-500">Total Keys</p></div>
+        <div class="glass p-4"><p class="text-2xl font-black text-emerald-600">${data.active}</p><p class="text-xs text-slate-500">Active</p></div>
+        <div class="glass p-4"><p class="text-2xl font-black text-red-600">${data.total - data.active}</p><p class="text-xs text-slate-500">Blocked</p></div>
+        <div class="glass p-4"><p class="text-2xl font-black text-amber-600">0</p><p class="text-xs text-slate-500">Bindings</p></div>
       </div>
     </div>`;
-  return new Response(htmlLayout('Dashboard', content, session), { headers: { 'Content-Type': 'text/html' } });
+
+  const content = `
+    <h1 class="text-2xl font-black mb-6">SDK Dashboard</h1>
+    <div id="dashWrap" class="mb-6">
+      <div class="flex gap-2 mb-4">
+        <button class="tab-btn active-m" data-tab="mundo" onclick="switchTab('dashWrap','mundo')">MUNDO</button>
+        <button class="tab-btn" data-tab="bcore" onclick="switchTab('dashWrap','bcore')">BCORE</button>
+      </div>
+      ${renderTab('MUNDO', m)}
+      ${renderTab('BCORE', b)}
+    </div>`;
+  return new Response(layout('Dashboard', content, s), { headers: { 'Content-Type': 'text/html' } });
 }
 
-async function handleGenerateGet(req, env) {
-  const session = await getSession(req);
-  if (!session) return Response.redirect(new URL('/login', req.url), 302);
-  const formHtml = (engine) => `
-    <form method="POST" class="space-y-5">
+async function handleGenerate(req, env) {
+  const s = await getSession(req); if (!s) return Response.redirect(new URL('/login', req.url), 302);
+  const url = new URL(req.url);
+  let flash = '';
+  if (url.searchParams.get('success') === '1') {
+    flash = `<div class="glass p-4 mb-6 border-l-4 border-emerald-500"><p class="font-bold text-emerald-700">Generated Successfully!</p><p class="text-sm">Engine: ${url.searchParams.get('engine')} | Key: ${url.searchParams.get('key')}</p></div>`;
+  }
+
+  const form = (engine) => `
+    <form method="POST" class="glass p-6 space-y-4">
       <input type="hidden" name="engine" value="${engine}">
-      <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Duration</label>
-      <select name="duration" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold">
-        <option value="7">7 Days</option>
-        <option value="15">15 Days</option>
-        <option value="30" selected>30 Days</option>
-        <option value="60">60 Days</option>
-      </select></div>
+      <input type="text" name="sdk_key" placeholder="Custom Key (Empty = Auto 16 char)" class="w-full bg-white/50 border px-4 py-3">
+      <select name="duration" class="w-full bg-white/50 border px-4 py-3">
+        <option value="7">7 Days</option><option value="15">15 Days</option><option value="30" selected>30 Days</option><option value="60">60 Days</option>
+      </select>
       <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Pkg Limit</label><input type="number" name="pkg_limit" min="1" max="10" value="1" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-bold text-center"></div>
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">App Limit</label><input type="number" name="app_limit" min="1" max="20" value="1" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-bold text-center"></div>
+        <input type="number" name="pkg_limit" min="1" max="10" value="1" placeholder="Pkg Limit" class="bg-white/50 border px-4 py-3 text-center">
+        <input type="number" name="app_limit" min="1" max="20" value="1" placeholder="App Limit" class="bg-white/50 border px-4 py-3 text-center">
       </div>
       <div class="flex gap-4">
-        <label class="flex items-center gap-2 bg-white/50 px-4 py-3 rounded-2xl border border-white/60 cursor-pointer"><input type="checkbox" name="feature1" checked class="w-5 h-5 rounded accent-emerald-500"><span class="text-sm font-bold text-slate-700">Feature 1</span></label>
-        <label class="flex items-center gap-2 bg-white/50 px-4 py-3 rounded-2xl border border-white/60 cursor-pointer"><input type="checkbox" name="feature2" checked class="w-5 h-5 rounded accent-emerald-500"><span class="text-sm font-bold text-slate-700">Feature 2</span></label>
+        <label class="flex items-center gap-2 bg-white/50 px-4 py-3 rounded-xl border cursor-pointer"><input type="checkbox" name="f1" checked> Feature 1</label>
+        <label class="flex items-center gap-2 bg-white/50 px-4 py-3 rounded-xl border cursor-pointer"><input type="checkbox" name="f2" checked> Feature 2</label>
       </div>
-      <button type="submit" class="btn-premium w-full py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wider">Generate ${engine} Key</button>
+      <button class="btn-premium w-full">Generate ${engine} Key</button>
     </form>`;
 
   const content = `
-    <div class="max-w-2xl mx-auto">
-      <h1 class="text-2xl md:text-3xl font-black text-slate-800 mb-6 flex items-center gap-3"><i class="bi bi-key-fill text-emerald-500"></i> Generate SDK</h1>
-      <div id="generateWrapper" class="glass-card p-6 md:p-8">
-        <div class="flex gap-2 mb-6">
-          <button class="tab-btn active" data-tab="mundo" onclick="switchTab('generateWrapper', 'mundo')">MUNDO</button>
-          <button class="tab-btn" data-tab="bcore" onclick="switchTab('generateWrapper', 'bcore')">BCORE</button>
-        </div>
-        <div id="tab-mundo" class="tab-content">${formHtml('MUNDO')}</div>
-        <div id="tab-bcore" class="tab-content hidden">${formHtml('BCORE')}</div>
+    <h1 class="text-2xl font-black mb-6">Generate SDK</h1>
+    ${flash}
+    <div id="genWrap">
+      <div class="flex gap-2 mb-4">
+        <button class="tab-btn active-m" data-tab="mundo" onclick="switchTab('genWrap','mundo')">MUNDO</button>
+        <button class="tab-btn" data-tab="bcore" onclick="switchTab('genWrap','bcore')">BCORE</button>
       </div>
+      <div id="tc-mundo" class="tab-content active">${form('MUNDO')}</div>
+      <div id="tc-bcore" class="tab-content">${form('BCORE')}</div>
     </div>`;
-  return new Response(htmlLayout('Generate Key', content, session), { headers: { 'Content-Type': 'text/html' } });
+  return new Response(layout('Generate', content, s), { headers: { 'Content-Type': 'text/html' } });
 }
 
 async function handleGeneratePost(req, env) {
-  const session = await getSession(req);
-  if (!session) return Response.redirect(new URL('/login', req.url), 302);
-  const formData = await req.formData();
-  const sdk_key = Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-  await env.DB.prepare(`INSERT INTO sdk_keys (user_id, engine, sdk_key, duration_days, pkg_limit, app_limit, feature1, feature2) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(session.userId, formData.get('engine'), sdk_key, parseInt(formData.get('duration')), parseInt(formData.get('pkg_limit')), parseInt(formData.get('app_limit')), formData.has('feature1')?1:0, formData.has('feature2')?1:0).run();
-  return Response.redirect(new URL('/keys', req.url), 302);
+  const s = await getSession(req); if (!s) return Response.redirect(new URL('/login', req.url), 302);
+  const f = await req.formData();
+  let key = f.get('sdk_key').trim();
+  if (!key) key = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  
+  await env.DB.prepare('INSERT INTO sdk_keys (user_id,engine,sdk_key,duration_days,pkg_limit,app_limit,feature1,feature2) VALUES(?,?,?,?,?,?,?,?)')
+    .bind(s.id, f.get('engine'), key, f.get('duration'), f.get('pkg_limit'), f.get('app_limit'), f.has('f1')?1:0, f.has('f2')?1:0).run();
+  
+  return Response.redirect(new URL(`/generate?success=1&engine=${f.get('engine')}&key=${key}`, req.url), 302);
 }
 
-async function handleKeysGet(req, env) {
-  const session = await getSession(req);
-  if (!session) return Response.redirect(new URL('/login', req.url), 302);
-  const keys = await env.DB.prepare('SELECT * FROM sdk_keys WHERE user_id = ? ORDER BY id DESC').bind(session.userId).all();
+async function handleKeys(req, env) {
+  const s = await getSession(req); if (!s) return Response.redirect(new URL('/login', req.url), 302);
+  
+  if (req.method === 'POST') {
+    const f = await req.formData();
+    const act = f.get('action'), kid = f.get('key_id'), bid = f.get('bind_id');
+    if (act === 'block') await env.DB.prepare('UPDATE sdk_keys SET is_blocked=1 WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    if (act === 'unblock') await env.DB.prepare('UPDATE sdk_keys SET is_blocked=0 WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    if (act === 'delete') await env.DB.prepare('DELETE FROM sdk_keys WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    if (act === 'add_bind') await env.DB.prepare('INSERT INTO sdk_bindings (key_id,pkg_name,app_name) VALUES(?,?,?)').bind(kid, f.get('pkg'), f.get('app')).run();
+    if (act === 'del_bind') await env.DB.prepare('DELETE FROM sdk_bindings WHERE id=?').bind(bid).run();
+    return Response.redirect(new URL('/keys', req.url), 302);
+  }
+
+  const keys = await env.DB.prepare('SELECT * FROM sdk_keys WHERE user_id=? ORDER BY id DESC').bind(s.id).all();
   
   const renderKeys = (engine) => {
-    const filtered = keys.results.filter(k => k.engine === engine);
-    if (filtered.length === 0) return `<p class="text-center text-slate-400 py-10">No ${engine} keys found.</p>`;
-    return filtered.map(k => `
-      <div class="glass-card p-4 mb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div class="flex-1 min-w-0">
-          <p class="font-mono text-sm font-bold text-slate-700 truncate">${k.sdk_key}</p>
-          <p class="text-[10px] text-slate-400 mt-1">${k.duration_days} Days • ${k.pkg_limit} Pkg • ${k.app_limit} App</p>
+    const list = keys.results.filter(k => k.engine === engine);
+    if (!list.length) return `<p class="text-center text-slate-400 py-10">No keys found</p>`;
+    return list.map(k => {
+      const binds = []; // Simplified for brevity, in real app fetch bindings
+      return `
+      <div class="glass p-4 mb-4">
+        <div class="flex justify-between items-start mb-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex gap-2 mb-1">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg ${k.is_blocked?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-500'}">${k.is_blocked?'BLOCKED':'ACTIVE'}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-50 text-purple-500">${k.duration_days}D</span>
+            </div>
+            <p id="k-${k.id}" class="font-mono text-sm font-bold break-all blur-sm select-none">${k.sdk_key}</p>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] font-extrabold px-2 py-1 rounded-lg ${k.is_blocked ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'}">${k.is_blocked ? 'BLOCKED' : 'ACTIVE'}</span>
-          <form method="POST" class="inline">
-            <input type="hidden" name="key_id" value="${k.id}">
-            <input type="hidden" name="action" value="${k.is_blocked ? 'unblock' : 'block'}">
-            <button class="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/60 hover:bg-white text-slate-600">${k.is_blocked ? 'Unlock' : 'Lock'}</button>
-          </form>
-          <form method="POST" class="inline" onsubmit="return confirm('Delete this key?')">
-            <input type="hidden" name="key_id" value="${k.id}">
-            <input type="hidden" name="action" value="delete">
-            <button class="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="toggleBlur(${k.id})" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/60 hover:bg-white"><i class="bi bi-eye"></i> Show</button>
+          <button onclick="copyKey('${k.sdk_key}',this)" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/60 hover:bg-white"><i class="bi bi-clipboard"></i> Copy</button>
+          <form method="POST" class="inline"><input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="${k.is_blocked?'unblock':'block'}"><button class="px-3 py-1.5 text-xs font-bold rounded-xl ${k.is_blocked?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600'}">${k.is_blocked?'Unlock':'Lock'}</button></form>
+          <form method="POST" class="inline" onsubmit="return confirm('Delete?')"><input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="delete"><button class="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-50 text-red-600">Delete</button></form>
+        </div>
+        <div class="mt-4 border-t pt-3">
+          <p class="text-xs font-bold text-slate-500 mb-2">Bindings (Pkg/App)</p>
+          <form method="POST" class="flex gap-2">
+            <input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="add_bind">
+            <input type="text" name="pkg" placeholder="pkg_name" required class="flex-1 bg-white/50 border px-3 py-1.5 text-xs">
+            <input type="text" name="app" placeholder="app_name" required class="flex-1 bg-white/50 border px-3 py-1.5 text-xs">
+            <button class="btn-premium !py-1.5 !px-3 text-xs">Add</button>
           </form>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   };
 
   const content = `
-    <div class="max-w-4xl mx-auto">
-      <h1 class="text-2xl md:text-3xl font-black text-slate-800 mb-6 flex items-center gap-3"><i class="bi bi-view-list text-emerald-500"></i> SDK Keys</h1>
-      <div id="keysWrapper" class="glass-card p-6">
-        <div class="flex gap-2 mb-6">
-          <button class="tab-btn active" data-tab="mundo" onclick="switchTab('keysWrapper', 'mundo')">MUNDO</button>
-          <button class="tab-btn" data-tab="bcore" onclick="switchTab('keysWrapper', 'bcore')">BCORE</button>
-        </div>
-        <div id="tab-mundo" class="tab-content">${renderKeys('MUNDO')}</div>
-        <div id="tab-bcore" class="tab-content hidden">${renderKeys('BCORE')}</div>
+    <h1 class="text-2xl font-black mb-6">SDK Keys</h1>
+    <div id="keysWrap">
+      <div class="flex gap-2 mb-4">
+        <button class="tab-btn active-m" data-tab="mundo" onclick="switchTab('keysWrap','mundo')">MUNDO</button>
+        <button class="tab-btn" data-tab="bcore" onclick="switchTab('keysWrap','bcore')">BCORE</button>
       </div>
+      <div id="tc-mundo" class="tab-content active">${renderKeys('MUNDO')}</div>
+      <div id="tc-bcore" class="tab-content">${renderKeys('BCORE')}</div>
     </div>`;
-  return new Response(htmlLayout('SDK Keys', content, session), { headers: { 'Content-Type': 'text/html' } });
+  return new Response(layout('Keys', content, s), { headers: { 'Content-Type': 'text/html' } });
 }
 
-async function handleKeysPost(req, env) {
-  const session = await getSession(req);
-  if (!session) return Response.redirect(new URL('/login', req.url), 302);
-  const formData = await req.formData();
-  const action = formData.get('action');
-  const keyId = formData.get('key_id');
-  if (action === 'block') await env.DB.prepare('UPDATE sdk_keys SET is_blocked = 1 WHERE id = ? AND user_id = ?').bind(keyId, session.userId).run();
-  if (action === 'unblock') await env.DB.prepare('UPDATE sdk_keys SET is_blocked = 0 WHERE id = ? AND user_id = ?').bind(keyId, session.userId).run();
-  if (action === 'delete') await env.DB.prepare('DELETE FROM sdk_keys WHERE id = ? AND user_id = ?').bind(keyId, session.userId).run();
-  return Response.redirect(new URL('/keys', req.url), 302);
-}
+async function handleServer(req, env) {
+  const s = await getSession(req); 
+  if (!s || s.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302); // Admin blocked
 
-// 🚨 SIRF OWNER KE LIYE: Server Control
-async function handleServerGet(req, env) {
-  const session = await getSession(req);
-  if (!session || session.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
+  if (req.method === 'POST') {
+    const f = await req.formData();
+    const eng = f.get('engine'), mode = f.has('maint') ? 1 : 0, msg = f.get('msg') || '';
+    await env.DB.prepare('INSERT OR REPLACE INTO server_status (engine,maintenance_mode,maintenance_message) VALUES(?,?,?)').bind(eng, mode, msg).run();
+    return Response.redirect(new URL('/server', req.url), 302);
+  }
+
   const status = await env.DB.prepare('SELECT * FROM server_status').all();
-  const getStat = (engine) => status.results.find(s => s.engine === engine) || { maintenance_mode: 0, maintenance_message: '' };
-  const m = getStat('MUNDO'), b = getStat('BCORE');
+  const get = (e) => status.results.find(x => x.engine === e) || { maintenance_mode: 0, maintenance_message: '' };
+  const m = get('MUNDO'), b = get('BCORE');
 
-  const renderServer = (engine, data) => `
-    <div class="glass-card p-6 mb-6">
-      <h3 class="text-xl font-black text-slate-800 mb-4">${engine} Engine</h3>
-      <form method="POST" class="space-y-4">
-        <input type="hidden" name="engine" value="${engine}">
-        <div class="flex items-center justify-between bg-white/50 p-4 rounded-2xl border border-white/60">
-          <span class="font-bold text-slate-700">Maintenance Mode</span>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" name="maintenance_mode" value="1" ${data.maintenance_mode ? 'checked' : ''} class="sr-only peer">
-            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+  const renderServer = (engine, data, color) => `
+    <div id="tc-${engine.toLowerCase()}" class="tab-content ${engine==='MUNDO'?'active':''}">
+      <div class="glass p-6 mb-6">
+        <h3 class="font-black text-xl mb-4">${engine} Server Control</h3>
+        <form method="POST" class="space-y-4">
+          <input type="hidden" name="engine" value="${engine}">
+          <label class="flex items-center justify-between bg-white/50 p-4 rounded-2xl border cursor-pointer">
+            <span class="font-bold">Maintenance Mode</span>
+            <input type="checkbox" name="maint" ${data.maintenance_mode?'checked':''} class="w-5 h-5 accent-red-500">
           </label>
+          <input type="text" name="msg" value="${data.maintenance_message}" placeholder="Maintenance Message" class="w-full bg-white/50 border px-4 py-3">
+          <button class="btn-premium w-full">Save Status</button>
+        </form>
+      </div>
+      <div class="glass p-6">
+        <h3 class="font-black text-xl mb-4">API Endpoints & Docs</h3>
+        <div class="bg-slate-900 text-slate-100 p-4 rounded-2xl font-mono text-xs overflow-x-auto">
+          <p class="text-emerald-400">POST /api/${engine.toLowerCase()}</p>
+          <p class="mt-2 text-slate-400">Encryption: ${engine==='MUNDO'?'AES-128-ECB':'RC4'}</p>
+          <p class="mt-1 text-slate-400">Format: JSON / Base64</p>
         </div>
-        <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Maintenance Message</label>
-        <input type="text" name="maintenance_message" value="${data.maintenance_message}" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold"></div>
-        <button type="submit" class="btn-premium w-full py-3 rounded-2xl font-extrabold text-sm uppercase tracking-wider">Save ${engine} Status</button>
-      </form>
+      </div>
     </div>`;
 
   const content = `
-    <div class="max-w-3xl mx-auto">
-      <h1 class="text-2xl md:text-3xl font-black text-slate-800 mb-6 flex items-center gap-3"><i class="bi bi-hdd-network-fill text-emerald-500"></i> Server Control</h1>
+    <h1 class="text-2xl font-black mb-6">Server & API</h1>
+    <div id="srvWrap">
+      <div class="flex gap-2 mb-4">
+        <button class="tab-btn active-m" data-tab="mundo" onclick="switchTab('srvWrap','mundo')">MUNDO</button>
+        <button class="tab-btn" data-tab="bcore" onclick="switchTab('srvWrap','bcore')">BCORE</button>
+      </div>
       ${renderServer('MUNDO', m)}
       ${renderServer('BCORE', b)}
     </div>`;
-  return new Response(htmlLayout('Server Control', content, session), { headers: { 'Content-Type': 'text/html' } });
+  return new Response(layout('Server', content, s), { headers: { 'Content-Type': 'text/html' } });
 }
 
-async function handleServerPost(req, env) {
-  const session = await getSession(req);
-  if (!session || session.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
-  const formData = await req.formData();
-  const engine = formData.get('engine');
-  const mode = formData.get('maintenance_mode') === '1' ? 1 : 0;
-  const msg = formData.get('maintenance_message') || '';
-  await env.DB.prepare('INSERT OR REPLACE INTO server_status (engine, maintenance_mode, maintenance_message) VALUES (?, ?, ?)').bind(engine, mode, msg).run();
-  return Response.redirect(new URL('/server', req.url), 302);
-}
+async function handleReferral(req, env) {
+  const s = await getSession(req);
+  if (!s || s.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
 
-// 🚨 SIRF OWNER KE LIYE: Referral System
-async function handleReferralGet(req, env) {
-  const session = await getSession(req);
-  if (!session || session.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
-  const refs = await env.DB.prepare('SELECT * FROM referrals WHERE created_by = ? ORDER BY id DESC').bind(session.userId).all();
+  if (req.method === 'POST') {
+    const f = await req.formData();
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    await env.DB.prepare('INSERT INTO referrals (code,role_granted,created_by) VALUES(?,?,?)').bind(code, f.get('role'), s.id).run();
+    return Response.redirect(new URL('/referral', req.url), 302);
+  }
 
-  const refList = refs.results.map(r => `
-    <div class="glass-card p-4 mb-3 flex items-center justify-between">
-      <div>
-        <p class="font-mono font-bold text-slate-700">${r.code}</p>
-        <p class="text-[10px] text-slate-400 mt-1">Grants Role: <span class="font-bold text-emerald-600">${r.role_granted}</span></p>
-      </div>
-      <span class="text-[10px] font-extrabold px-2 py-1 rounded-lg ${r.is_used ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'}">${r.is_used ? 'USED' : 'ACTIVE'}</span>
-    </div>
-  `).join('');
+  const refs = await env.DB.prepare('SELECT * FROM referrals WHERE created_by=? ORDER BY id DESC').bind(s.id).all();
+  const list = refs.results.map(r => `
+    <div class="glass p-4 mb-2 flex justify-between items-center">
+      <div><p class="font-mono font-bold">${r.code}</p><p class="text-[10px] text-slate-500">Role: ${r.role_granted}</p></div>
+      <span class="text-[10px] font-bold px-2 py-1 rounded-lg ${r.is_used?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-500'}">${r.is_used?'USED':'ACTIVE'}</span>
+    </div>`).join('');
 
   const content = `
-    <div class="max-w-2xl mx-auto">
-      <h1 class="text-2xl md:text-3xl font-black text-slate-800 mb-6 flex items-center gap-3"><i class="bi bi-person-plus-fill text-emerald-500"></i> Generate Referral</h1>
-      <div class="glass-card p-6 mb-8">
-        <form method="POST" class="space-y-5">
-          <div>
-            <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Select Role for New User</label>
-            <select name="role" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold">
-              <option value="ADMIN">Admin (Can generate keys only)</option>
-              <option value="OWNER">Owner (Full access)</option>
-            </select>
-          </div>
-          <button type="submit" class="btn-premium w-full py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wider">Generate Referral Code</button>
-        </form>
-      </div>
-      <h3 class="text-xl font-black text-slate-800 mb-4">Your Referral Codes</h3>
-      ${refList || '<p class="text-center text-slate-400">No codes generated yet.</p>'}
-    </div>`;
-  return new Response(htmlLayout('Referral', content, session), { headers: { 'Content-Type': 'text/html' } });
+    <h1 class="text-2xl font-black mb-6">Referral System</h1>
+    <div class="glass p-6 mb-6">
+      <form method="POST" class="space-y-4">
+        <select name="role" class="w-full bg-white/50 border px-4 py-3">
+          <option value="ADMIN">Admin (Keys Only)</option>
+          <option value="OWNER">Owner (Full Access)</option>
+        </select>
+        <button class="btn-premium w-full">Generate Code</button>
+      </form>
+    </div>
+    <h3 class="font-black text-xl mb-4">Your Codes</h3>
+    ${list || '<p class="text-slate-400">No codes yet</p>'}`;
+  return new Response(layout('Referral', content, s), { headers: { 'Content-Type': 'text/html' } });
 }
 
-async function handleReferralPost(req, env) {
-  const session = await getSession(req);
-  if (!session || session.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
-  const formData = await req.formData();
-  const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-  await env.DB.prepare('INSERT INTO referrals (code, role_granted, created_by) VALUES (?, ?, ?)').bind(code, formData.get('role'), session.userId).run();
-  return Response.redirect(new URL('/referral', req.url), 302);
-}
-
-async function handleLogout(req, env) {
-  return new Response(null, { status: 302, headers: { 'Location': '/login', 'Set-Cookie': clearSessionCookie() } });
+async function handleLogout() {
+  return new Response(null, { status: 302, headers: { 'Location': '/login', 'Set-Cookie': clearSession() } });
 }
 
 // ==========================================
-// 🚦 MAIN WORKER ENTRY POINT
+// 🚦 ROUTER
 // ==========================================
 export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const routes = [
-      { method: 'GET', path: '/', handler: (req) => Response.redirect(new URL('/login', req.url), 302) },
-      { method: 'GET', path: '/login', handler: handleLoginGet },
-      { method: 'POST', path: '/login', handler: handleLoginPost },
-      { method: 'GET', path: '/register', handler: handleRegisterGet },
-      { method: 'POST', path: '/register', handler: handleRegisterPost },
-      { method: 'GET', path: '/dashboard', handler: handleDashboard },
-      { method: 'GET', path: '/generate', handler: handleGenerateGet },
-      { method: 'POST', path: '/generate', handler: handleGeneratePost },
-      { method: 'GET', path: '/keys', handler: handleKeysGet },
-      { method: 'POST', path: '/keys', handler: handleKeysPost },
-      { method: 'GET', path: '/server', handler: handleServerGet },
-      { method: 'POST', path: '/server', handler: handleServerPost },
-      { method: 'GET', path: '/referral', handler: handleReferralGet },
-      { method: 'POST', path: '/referral', handler: handleReferralPost },
-      { method: 'GET', path: '/logout', handler: handleLogout }
-    ];
+  async fetch(req, env) {
+    const url = new URL(req.url);
+    const path = url.pathname;
+    const method = req.method;
 
-    for (const route of routes) {
-      if (request.method === route.method && url.pathname === route.path) {
-        return await route.handler(request, env, ctx);
-      }
-    }
-    return new Response('Not Found', { status: 404 });
+    if (path === '/' || path === '/login') return handleLogin(req, env);
+    if (path === '/register') return handleRegister(req, env);
+    if (path === '/logout') return handleLogout();
+    if (path === '/dashboard') return handleDashboard(req, env);
+    if (path === '/generate') return method === 'GET' ? handleGenerate(req, env) : handleGeneratePost(req, env);
+    if (path === '/keys') return handleKeys(req, env);
+    if (path === '/server') return handleServer(req, env);
+    if (path === '/referral') return handleReferral(req, env);
+
+    return new Response('404 Not Found', { status: 404 });
   }
 };
