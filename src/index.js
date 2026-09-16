@@ -34,6 +34,7 @@ function htmlLayout(title, content, user = null) {
         <i class="bi bi-view-list text-lg w-6 text-center"></i> SDK Keys
       </a>
     `;
+    // Sirf OWNER ke liye Server aur Referral links
     if (user.role === 'OWNER') {
       sidebarLinks += `
         <a href="/server" class="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-medium mb-1 text-slate-600 hover:bg-white/50 hover:text-emerald-700">
@@ -186,7 +187,8 @@ async function handleRegisterPost(req, env) {
   if (!ref) return new Response(htmlLayout('Register', `<div class="max-w-md mx-auto glass-card p-8 mt-10 text-center text-red-600 font-bold">Invalid or used referral code.</div>`), { headers: { 'Content-Type': 'text/html' } });
 
   try {
-    await env.DB.prepare('INSERT INTO users (username, password_hash, role, created_by) VALUES (?, ?, ?, ?)').bind(username, password, ref.role_granted, ref.created_by).run();
+    // Referral ke selected role ke hisaab se user create hoga
+    await env.DB.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').bind(username, password, ref.role_granted).run();
     await env.DB.prepare('UPDATE referrals SET is_used = 1 WHERE code = ?').bind(refCode).run();
     return Response.redirect(new URL('/login', req.url), 302);
   } catch (e) {
@@ -214,11 +216,16 @@ async function handleDashboard(req, env) {
 async function handleGenerateGet(req, env) {
   const session = await getSession(req);
   if (!session) return Response.redirect(new URL('/login', req.url), 302);
-  const formHtml = (engine, color) => `
+  const formHtml = (engine) => `
     <form method="POST" class="space-y-5">
       <input type="hidden" name="engine" value="${engine}">
       <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Duration</label>
-      <select name="duration" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold"><option value="7">7 Days</option><option value="15">15 Days</option><option value="30" selected>30 Days</option><option value="60">60 Days</option></select></div>
+      <select name="duration" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold">
+        <option value="7">7 Days</option>
+        <option value="15">15 Days</option>
+        <option value="30" selected>30 Days</option>
+        <option value="60">60 Days</option>
+      </select></div>
       <div class="grid grid-cols-2 gap-4">
         <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Pkg Limit</label><input type="number" name="pkg_limit" min="1" max="10" value="1" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-bold text-center"></div>
         <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">App Limit</label><input type="number" name="app_limit" min="1" max="20" value="1" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-bold text-center"></div>
@@ -238,8 +245,8 @@ async function handleGenerateGet(req, env) {
           <button class="tab-btn active" data-tab="mundo" onclick="switchTab('generateWrapper', 'mundo')">MUNDO</button>
           <button class="tab-btn" data-tab="bcore" onclick="switchTab('generateWrapper', 'bcore')">BCORE</button>
         </div>
-        <div id="tab-mundo" class="tab-content">${formHtml('MUNDO', 'purple')}</div>
-        <div id="tab-bcore" class="tab-content hidden">${formHtml('BCORE', 'amber')}</div>
+        <div id="tab-mundo" class="tab-content">${formHtml('MUNDO')}</div>
+        <div id="tab-bcore" class="tab-content hidden">${formHtml('BCORE')}</div>
       </div>
     </div>`;
   return new Response(htmlLayout('Generate Key', content, session), { headers: { 'Content-Type': 'text/html' } });
@@ -259,7 +266,7 @@ async function handleKeysGet(req, env) {
   if (!session) return Response.redirect(new URL('/login', req.url), 302);
   const keys = await env.DB.prepare('SELECT * FROM sdk_keys WHERE user_id = ? ORDER BY id DESC').bind(session.userId).all();
   
-  const renderKeys = (engine, color) => {
+  const renderKeys = (engine) => {
     const filtered = keys.results.filter(k => k.engine === engine);
     if (filtered.length === 0) return `<p class="text-center text-slate-400 py-10">No ${engine} keys found.</p>`;
     return filtered.map(k => `
@@ -312,6 +319,7 @@ async function handleKeysPost(req, env) {
   return Response.redirect(new URL('/keys', req.url), 302);
 }
 
+// 🚨 SIRF OWNER KE LIYE: Server Control
 async function handleServerGet(req, env) {
   const session = await getSession(req);
   if (!session || session.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
@@ -319,7 +327,7 @@ async function handleServerGet(req, env) {
   const getStat = (engine) => status.results.find(s => s.engine === engine) || { maintenance_mode: 0, maintenance_message: '' };
   const m = getStat('MUNDO'), b = getStat('BCORE');
 
-  const renderServer = (engine, data, color) => `
+  const renderServer = (engine, data) => `
     <div class="glass-card p-6 mb-6">
       <h3 class="text-xl font-black text-slate-800 mb-4">${engine} Engine</h3>
       <form method="POST" class="space-y-4">
@@ -357,6 +365,7 @@ async function handleServerPost(req, env) {
   return Response.redirect(new URL('/server', req.url), 302);
 }
 
+// 🚨 SIRF OWNER KE LIYE: Referral System
 async function handleReferralGet(req, env) {
   const session = await getSession(req);
   if (!session || session.role !== 'OWNER') return Response.redirect(new URL('/dashboard', req.url), 302);
@@ -377,8 +386,13 @@ async function handleReferralGet(req, env) {
       <h1 class="text-2xl md:text-3xl font-black text-slate-800 mb-6 flex items-center gap-3"><i class="bi bi-person-plus-fill text-emerald-500"></i> Generate Referral</h1>
       <div class="glass-card p-6 mb-8">
         <form method="POST" class="space-y-5">
-          <div><label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Select Role for New User</label>
-          <select name="role" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold"><option value="ADMIN">Admin (Can generate keys)</option><option value="OWNER">Owner (Full access)</option></select></div>
+          <div>
+            <label class="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">Select Role for New User</label>
+            <select name="role" class="w-full bg-white/50 border border-white/60 px-4 py-3 text-sm font-semibold">
+              <option value="ADMIN">Admin (Can generate keys only)</option>
+              <option value="OWNER">Owner (Full access)</option>
+            </select>
+          </div>
           <button type="submit" class="btn-premium w-full py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wider">Generate Referral Code</button>
         </form>
       </div>
