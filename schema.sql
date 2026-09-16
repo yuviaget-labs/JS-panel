@@ -1,11 +1,18 @@
+-- ==========================================
+-- 1. USERS TABLE (Login & Roles)
+-- ==========================================
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('OWNER', 'ADMIN')),
+  is_blocked INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==========================================
+-- 2. REFERRALS TABLE (Owner dwara generate kiye gaye codes)
+-- ==========================================
 CREATE TABLE IF NOT EXISTS referrals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   code TEXT UNIQUE NOT NULL,
@@ -15,6 +22,9 @@ CREATE TABLE IF NOT EXISTS referrals (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==========================================
+-- 3. SDK KEYS TABLE (Unified MUNDO & BCORE)
+-- ==========================================
 CREATE TABLE IF NOT EXISTS sdk_keys (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -29,11 +39,19 @@ CREATE TABLE IF NOT EXISTS sdk_keys (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==========================================
+-- 4. SERVER STATUS TABLE (Maintenance Control)
+-- ==========================================
 CREATE TABLE IF NOT EXISTS server_status (
   engine TEXT PRIMARY KEY NOT NULL CHECK (engine IN ('MUNDO', 'BCORE')),
   maintenance_mode INTEGER DEFAULT 0,
   maintenance_message TEXT DEFAULT ''
 );
 
--- 🔥 DEFAULT OWNER ACCOUNT (Username: owner | Password: owner123)
-INSERT INTO users (username, password_hash, role) VALUES ('owner', 'owner123', 'OWNER');
+-- ==========================================
+-- 5. DEFAULT OWNER ACCOUNT (Pehla Login)
+-- ==========================================
+-- Username: owner
+-- Password: owner123
+INSERT INTO users (username, password_hash, role, is_blocked) 
+VALUES ('owner', 'owner123', 'OWNER', 0);
