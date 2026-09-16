@@ -29,3 +29,12 @@ CREATE TABLE IF NOT EXISTS sdk_keys (
   is_blocked INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS server_status (
+  engine TEXT PRIMARY KEY NOT NULL CHECK (engine IN ('MUNDO', 'BCORE')),
+  maintenance_mode INTEGER DEFAULT 0,
+  maintenance_message TEXT DEFAULT ''
+);
+
+-- 🔥 DEFAULT OWNER ACCOUNT CREATE KAREIN (Username: owner, Password: owner123)
+INSERT INTO users (username, password_hash, role) VALUES ('owner', 'owner123', 'OWNER');
