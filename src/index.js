@@ -11,19 +11,22 @@ function setSession(u) { return `session=${btoa(JSON.stringify(u))}; Path=/; Htt
 function clearSession() { return 'session=; Path=/; HttpOnly; Secure; Max-Age=0'; }
 
 // ==========================================
-// 🎨 UI LAYOUT (Mobile Responsive + Collapsing Sidebar)
+// 🎨 UI LAYOUT (Sidebar Logic)
 // ==========================================
 function layout(title, content, user) {
   let nav = '';
   if (user) {
+    // 1. Common Links (Dashboard, Generate, Keys) - For BOTH Owner & Admin
     nav = `
       <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-speedometer2 w-6 text-center"></i> Dashboard</a>
       <a href="/generate" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-key-fill w-6 text-center"></i> Generate SDK</a>
       <a href="/keys" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-view-list w-6 text-center"></i> SDK Keys</a>
     `;
+    
+    // 2. Owner Only Links (Server, Referral)
     if (user.role === 'OWNER') {
       nav += `
-        <a href="/server" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-hdd-network-fill w-6 text-center"></i> Server</a>
+        <a href="/server" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-hdd-network-fill w-6 text-center"></i> Server Control</a>
         <a href="/referral" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-white/50 hover:text-emerald-700 font-medium"><i class="bi bi-person-plus-fill w-6 text-center"></i> Referral</a>
       `;
     }
@@ -97,7 +100,11 @@ async function handleLogin(req, env) {
   }
   const f = await req.formData();
   const u = await env.DB.prepare('SELECT * FROM users WHERE username=? AND password=?').bind(f.get('username'), f.get('password')).first();
-  if (u) return new Response(null, { status: 302, headers: { 'Location': '/dashboard', 'Set-Cookie': setSession({ id: u.id, username: u.username, role: u.role }) } });
+  if (u) {
+    // FIX: Role ko automatically UPPERCASE kar rahe hain taaki sidebar mein Owner wale options aa jayein
+    const role = (u.role || '').toUpperCase(); 
+    return new Response(null, { status: 302, headers: { 'Location': '/dashboard', 'Set-Cookie': setSession({ id: u.id, username: u.username, role: role }) } });
+  }
   return new Response(layout('Login', `<div class="max-w-md mx-auto glass p-8 text-center text-red-600 font-bold">Invalid Credentials</div>`), { headers: { 'Content-Type': 'text/html' } });
 }
 
@@ -129,7 +136,7 @@ async function handleDashboard(req, env) {
   const getStat = (e) => stats.results.find(x => x.engine === e) || { total: 0, active: 0 };
   const m = getStat('MUNDO'), b = getStat('BCORE');
 
-  const renderTab = (engine, data, color) => `
+  const renderTab = (engine, data) => `
     <div id="tc-${engine.toLowerCase()}" class="tab-content ${engine==='MUNDO'?'active':''}">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="glass p-4"><p class="text-2xl font-black">${data.total}</p><p class="text-xs text-slate-500">Total Keys</p></div>
@@ -210,21 +217,43 @@ async function handleKeys(req, env) {
   if (req.method === 'POST') {
     const f = await req.formData();
     const act = f.get('action'), kid = f.get('key_id'), bid = f.get('bind_id');
-    if (act === 'block') await env.DB.prepare('UPDATE sdk_keys SET is_blocked=1 WHERE id=? AND user_id=?').bind(kid, s.id).run();
-    if (act === 'unblock') await env.DB.prepare('UPDATE sdk_keys SET is_blocked=0 WHERE id=? AND user_id=?').bind(kid, s.id).run();
-    if (act === 'delete') await env.DB.prepare('DELETE FROM sdk_keys WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    if (act === 'block_key') await env.DB.prepare('UPDATE sdk_keys SET is_blocked=1 WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    if (act === 'unblock_key') await env.DB.prepare('UPDATE sdk_keys SET is_blocked=0 WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    if (act === 'delete_key') await env.DB.prepare('DELETE FROM sdk_keys WHERE id=? AND user_id=?').bind(kid, s.id).run();
+    
     if (act === 'add_bind') await env.DB.prepare('INSERT INTO sdk_bindings (key_id,pkg_name,app_name) VALUES(?,?,?)').bind(kid, f.get('pkg'), f.get('app')).run();
-    if (act === 'del_bind') await env.DB.prepare('DELETE FROM sdk_bindings WHERE id=?').bind(bid).run();
+    if (act === 'save_bind') await env.DB.prepare('UPDATE sdk_bindings SET pkg_name=?, app_name=? WHERE id=?').bind(f.get('pkg'), f.get('app'), bid).run();
+    if (act === 'block_bind') await env.DB.prepare('UPDATE sdk_bindings SET is_blocked=1 WHERE id=?').bind(bid).run();
+    if (act === 'unblock_bind') await env.DB.prepare('UPDATE sdk_bindings SET is_blocked=0 WHERE id=?').bind(bid).run();
+    if (act === 'delete_bind') await env.DB.prepare('DELETE FROM sdk_bindings WHERE id=?').bind(bid).run();
     return Response.redirect(new URL('/keys', req.url), 302);
   }
 
   const keys = await env.DB.prepare('SELECT * FROM sdk_keys WHERE user_id=? ORDER BY id DESC').bind(s.id).all();
-  
+  const binds = await env.DB.prepare('SELECT * FROM sdk_bindings ORDER BY key_id DESC').all();
+  const bindMap = {};
+  binds.results.forEach(b => { if (!bindMap[b.key_id]) bindMap[b.key_id] = []; bindMap[b.key_id].push(b); });
+
   const renderKeys = (engine) => {
     const list = keys.results.filter(k => k.engine === engine);
     if (!list.length) return `<p class="text-center text-slate-400 py-10">No keys found</p>`;
     return list.map(k => {
-      const binds = []; // Simplified for brevity, in real app fetch bindings
+      const kbinds = bindMap[k.id] || [];
+      const bindsHtml = kbinds.map(b => `
+        <div class="glass p-3 mt-2 flex flex-wrap gap-2 items-center">
+          <form method="POST" class="flex flex-wrap gap-2 items-center flex-1">
+            <input type="hidden" name="action" value="save_bind">
+            <input type="hidden" name="bind_id" value="${b.id}">
+            <input type="text" name="pkg" value="${b.pkg_name}" class="flex-1 min-w-[100px] bg-white/50 border px-3 py-1.5 text-xs font-mono">
+            <input type="text" name="app" value="${b.app_name}" class="flex-1 min-w-[100px] bg-white/50 border px-3 py-1.5 text-xs font-mono">
+            <button class="px-2 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-600"><i class="bi bi-check2"></i></button>
+          </form>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg ${b.is_blocked?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-500'}">${b.is_blocked?'BLOCKED':'ACTIVE'}</span>
+          <form method="POST" class="inline"><input type="hidden" name="action" value="${b.is_blocked?'unblock_bind':'block_bind'}"><input type="hidden" name="bind_id" value="${b.id}"><button class="text-[10px] font-bold ${b.is_blocked?'text-emerald-600':'text-amber-600'}">${b.is_blocked?'Unlock':'Lock'}</button></form>
+          <form method="POST" class="inline" onsubmit="return confirm('Delete?')"><input type="hidden" name="action" value="delete_bind"><input type="hidden" name="bind_id" value="${b.id}"><button class="text-[10px] font-bold text-red-600">Delete</button></form>
+        </div>
+      `).join('');
+
       return `
       <div class="glass p-4 mb-4">
         <div class="flex justify-between items-start mb-3">
@@ -236,15 +265,16 @@ async function handleKeys(req, env) {
             <p id="k-${k.id}" class="font-mono text-sm font-bold break-all blur-sm select-none">${k.sdk_key}</p>
           </div>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2 mb-3">
           <button onclick="toggleBlur(${k.id})" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/60 hover:bg-white"><i class="bi bi-eye"></i> Show</button>
           <button onclick="copyKey('${k.sdk_key}',this)" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-white/60 hover:bg-white"><i class="bi bi-clipboard"></i> Copy</button>
-          <form method="POST" class="inline"><input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="${k.is_blocked?'unblock':'block'}"><button class="px-3 py-1.5 text-xs font-bold rounded-xl ${k.is_blocked?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600'}">${k.is_blocked?'Unlock':'Lock'}</button></form>
-          <form method="POST" class="inline" onsubmit="return confirm('Delete?')"><input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="delete"><button class="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-50 text-red-600">Delete</button></form>
+          <form method="POST" class="inline"><input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="${k.is_blocked?'unblock_key':'block_key'}"><button class="px-3 py-1.5 text-xs font-bold rounded-xl ${k.is_blocked?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600'}">${k.is_blocked?'Unlock':'Lock'}</button></form>
+          <form method="POST" class="inline" onsubmit="return confirm('Delete?')"><input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="delete_key"><button class="px-3 py-1.5 text-xs font-bold rounded-xl bg-red-50 text-red-600">Delete</button></form>
         </div>
-        <div class="mt-4 border-t pt-3">
+        <div class="border-t pt-3">
           <p class="text-xs font-bold text-slate-500 mb-2">Bindings (Pkg/App)</p>
-          <form method="POST" class="flex gap-2">
+          ${bindsHtml}
+          <form method="POST" class="flex gap-2 mt-3">
             <input type="hidden" name="key_id" value="${k.id}"><input type="hidden" name="action" value="add_bind">
             <input type="text" name="pkg" placeholder="pkg_name" required class="flex-1 bg-white/50 border px-3 py-1.5 text-xs">
             <input type="text" name="app" placeholder="app_name" required class="flex-1 bg-white/50 border px-3 py-1.5 text-xs">
@@ -283,7 +313,7 @@ async function handleServer(req, env) {
   const get = (e) => status.results.find(x => x.engine === e) || { maintenance_mode: 0, maintenance_message: '' };
   const m = get('MUNDO'), b = get('BCORE');
 
-  const renderServer = (engine, data, color) => `
+  const renderServer = (engine, data) => `
     <div id="tc-${engine.toLowerCase()}" class="tab-content ${engine==='MUNDO'?'active':''}">
       <div class="glass p-6 mb-6">
         <h3 class="font-black text-xl mb-4">${engine} Server Control</h3>
@@ -296,14 +326,6 @@ async function handleServer(req, env) {
           <input type="text" name="msg" value="${data.maintenance_message}" placeholder="Maintenance Message" class="w-full bg-white/50 border px-4 py-3">
           <button class="btn-premium w-full">Save Status</button>
         </form>
-      </div>
-      <div class="glass p-6">
-        <h3 class="font-black text-xl mb-4">API Endpoints & Docs</h3>
-        <div class="bg-slate-900 text-slate-100 p-4 rounded-2xl font-mono text-xs overflow-x-auto">
-          <p class="text-emerald-400">POST /api/${engine.toLowerCase()}</p>
-          <p class="mt-2 text-slate-400">Encryption: ${engine==='MUNDO'?'AES-128-ECB':'RC4'}</p>
-          <p class="mt-1 text-slate-400">Format: JSON / Base64</p>
-        </div>
       </div>
     </div>`;
 
