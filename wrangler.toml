@@ -1,0 +1,8 @@
+name = "sdk-panel-worker"
+main = "src/index.js"
+compatibility_date = "2023-10-30"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sdk-panel-db"
+database_id = "your-d1-database-id-here" # Replace after running `wrangler d1 create sdk-panel-db`
